@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Dashboard - AJAX & Web Service</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'soft-blue': '#4A90E2',
+                        'soft-gray': '#f8f9fa',
+                        'light-bg': '#ffffff',
+                        'dark-card': '#2d3748',
+                        'dark-bg': '#1a202c',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+
+        .forecast-scroll {
+            overflow-x: auto;
+            white-space: nowrap;
+            padding-bottom: 8px;
+        }
+        .forecast-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+        .forecast-scroll::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 10px;
+        }
+        .dark .forecast-scroll::-webkit-scrollbar-thumb {
+            background-color: #4a5568;
+        }
+        .forecast-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #autocomplete-results {
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 10;
+        }
+    </style>
+</head>
+
+<body class="font-sans min-h-screen bg-soft-gray dark:bg-dark-bg transition-colors duration-300 p-4 sm:p-8">
+    <div id="loading-overlay" class="fixed inset-0 bg-white/70 dark:bg-dark-bg/70 z-50 flex items-center justify-center hidden">
+        <div class="spinner-border animate-spin inline-block w-8 h-8 border-4 rounded-full border-soft-blue border-r-transparent"></div>
+        <span class="ml-3 text-slate-700 dark:text-slate-300">Memuat data...</span>
+    </div>
+
+    <div class="max-w-6xl mx-auto space-y-8">
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+            <h1 class="text-3xl font-bold text-slate-800 dark:text-white">Weather Dashboard</h1>
+
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300">
+                    <span id="celsius-toggle" class="cursor-pointer px-2 py-1 rounded-l-full transition-all duration-200">°C</span>
+                    <span id="fahrenheit-toggle" class="cursor-pointer px-2 py-1 rounded-r-full transition-all duration-200">°F</span>
+                </div>
+                
+                <button id="theme-toggle" class="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-200" title="Toggle Tema">
+                    <svg id="theme-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                </button>
+            </div>
+        </header>
+
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-2 relative">
+                <div class="relative">
+                    <input type="text" id="search-input" placeholder="Cari kota, contoh: Jakarta" class="w-full py-3 pl-12 pr-4 text-lg bg-white dark:bg-dark-card text-slate-800 dark:text-white rounded-full shadow-lg transition-all duration-300 focus:ring-2 focus:ring-soft-blue focus:outline-none border border-transparent dark:border-slate-700" autocomplete="off">
+                    <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+                
+                <div id="autocomplete-results" class="absolute w-full mt-2 bg-white dark:bg-dark-card rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 transition-opacity duration-300 opacity-0 pointer-events-none">
+                    </div>
+            </div>
+            
+            <div class="lg:col-span-1 flex items-center justify-end space-x-4">
+                <button id="refresh-button" class="flex items-center space-x-2 px-6 py-3 bg-white dark:bg-dark-card text-soft-blue font-semibold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] dark:hover:bg-slate-700" title="Update Manual">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.582M3.644 12A8.001 8.001 0 0119.418 15m0 0H15"></path></svg>
+                    <span>Refresh</span>
+                </button>
+
+                <button id="share-button" class="p-3 bg-white dark:bg-dark-card text-slate-500 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] dark:hover:bg-slate-700" title="Bagikan">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.882 13.14 9 12.87 9 12.5a1.5 1.5 0 01-1.5-1.5c0-.37.12-.64.318-.842m-.318 1.684l.002-.004m-.002.004a.5.5 0 010-.996l.002-.004m-.002.004c.2-.2.318-.47.318-.842a1.5 1.5 0 00-1.5-1.5c-.37 0-.64.12-.842.318m-1.684 1.684a2.5 2.5 0 10-3.536 3.536 2.5 2.5 0 003.536-3.536zM15 11.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM12.5 16.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM18.684 13.342a2.5 2.5 0 10-3.536-3.536 2.5 2.5 0 003.536 3.536z"></path></svg>
+                </button>
+            </div>
+        </section>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div id="current-weather-card" class="lg:col-span-2 bg-light-bg dark:bg-dark-card p-6 sm:p-8 rounded-2xl shadow-lg transition-colors duration-300">
+                <div id="weather-display" class="min-h-[250px] flex flex-col justify-between">
+                    <p class="text-center text-slate-500 dark:text-slate-400 text-lg my-16">
+                        Silakan cari kota untuk menampilkan data cuaca.
+                    </p>
+                </div>
+            </div>
+
+            <div class="lg:col-span-1 bg-light-bg dark:bg-dark-card p-6 rounded-2xl shadow-lg transition-colors duration-300">
+                <h3 class="text-xl font-semibold mb-4 text-slate-800 dark:text-white border-b pb-2 border-slate-200 dark:border-slate-700">⭐ Kota Favorit</h3>
+                <div id="favorite-cities-list" class="space-y-3 min-h-[150px]">
+                    <p class="text-center text-slate-500 dark:text-slate-400 text-sm">
+                        Belum ada kota favorit.
+                    </p>
+                </div>
+            </div>
+        </main>
+
+        <section id="forecast-section" class="bg-light-bg dark:bg-dark-card p-6 rounded-2xl shadow-lg transition-colors duration-300 hidden">
+            <h3 class="text-xl font-semibold mb-4 text-slate-800 dark:text-white border-b pb-2 border-slate-200 dark:border-slate-700">🗓️ Prakiraan 5 Hari</h3>
+            <div id="forecast-list" class="forecast-scroll flex space-x-4">
+                </div>
+        </section>
+    </div>
+
+    <script>
+        const API_KEY = 'd63d3e5430b88d5ab6629297ab7782f8';
+        const BASE_URL = 'https://api.openweathermap.org/data/2.5/';
+        const GEO_URL = 'https://api.openweathermap.org/geo/1.0/direct';
+        const UNITS_C = 'metric';
+        const UNITS_F = 'imperial';
+
+        let currentCity = { name: '', lat: null, lon: null };
+        let currentUnit = localStorage.getItem('weatherUnit') || UNITS_C;
+        let isDarkMode = localStorage.getItem('weatherTheme') === 'dark';
+
+        const searchInput = document.getElementById('search-input');
+        const autocompleteResults = document.getElementById('autocomplete-results');
+        const weatherDisplay = document.getElementById('weather-display');
+        const forecastList = document.getElementById('forecast-list');
+        const forecastSection = document.getElementById('forecast-section');
+        const favoriteList = document.getElementById('favorite-cities-list');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const celsiusToggle = document.getElementById('celsius-toggle');
+        const fahrenheitToggle = document.getElementById('fahrenheit-toggle');
+        const refreshButton = document.getElementById('refresh-button');
+
+        function toggleLoading(show) {
+            loadingOverlay.classList.toggle('hidden', !show);
+        }
+
+        function getWeatherIcon(iconCode, size = '1x') {
+            return `http://openweathermap.org/img/wn/${iconCode}@${size}.png`;
+        }
+
+        function formatTimestamp(dt, timezone) {
+            const date = new Date((dt + timezone) * 1000);
+            return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
+        }
+        
+        function formatDayDate(dt) {
+            const date = new Date(dt * 1000);
+            return date.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
+        }
+
+        function convertTemp(temp, unit) {
+            if (unit === UNITS_C) {
+                return `${Math.round(temp)}°C`;
+            } else if (unit === UNITS_F) {
+                return `${Math.round(temp)}°F`;
+            }
+            return `${Math.round(temp)}K`;
+        }
+
+        function applyTheme() {
+            if (isDarkMode) {
+                document.documentElement.classList.add('dark');
+                themeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>`; // Moon icon
+                localStorage.setItem('weatherTheme', 'dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+                themeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>`; // Sun icon
+                localStorage.setItem('weatherTheme', 'light');
+            }
+        }
+
+        function applyUnitStyle() {
+            const cClass = 'bg-soft-blue text-white shadow-md';
+            const fClass = 'bg-white dark:bg-dark-card text-slate-700 dark:text-slate-300';
+
+            if (currentUnit === UNITS_C) {
+                celsiusToggle.className = `cursor-pointer px-2 py-1 rounded-l-full transition-all duration-200 ${cClass}`;
+                fahrenheitToggle.className = `cursor-pointer px-2 py-1 rounded-r-full transition-all duration-200 ${fClass}`;
+            } else {
+                celsiusToggle.className = `cursor-pointer px-2 py-1 rounded-l-full transition-all duration-200 ${fClass}`;
+                fahrenheitToggle.className = `cursor-pointer px-2 py-1 rounded-r-full transition-all duration-200 ${cClass}`;
+            }
+        }
+
+        function changeUnit(newUnit) {
+            if (currentUnit === newUnit) return;
+            currentUnit = newUnit;
+            localStorage.setItem('weatherUnit', newUnit);
+            applyUnitStyle();
+            if (currentCity.lat && currentCity.lon) {
+                fetchWeatherData(currentCity.lat, currentCity.lon, currentCity.name);
+            }
+        }
+
+        function getFavorites() {
+            const favorites = localStorage.getItem('weatherFavorites');
+            return favorites ? JSON.parse(favorites) : [];
+        }
+
+        function saveFavorites(favorites) {
+            localStorage.setItem('weatherFavorites', JSON.stringify(favorites));
+        }
+
+        function toggleFavorite(city) {
+            let favorites = getFavorites();
+            const index = favorites.findIndex(fav => fav.lat === city.lat && fav.lon === city.lon);
+
+            if (index > -1) {
+                favorites.splice(index, 1);
+            } else {
+                favorites.unshift(city);
+            }
+
+            saveFavorites(favorites);
+            renderFavorites();
+            updateFavoriteButton(city);
+        }
+
+        function renderFavorites() {
+            const favorites = getFavorites();
+            favoriteList.innerHTML = '';
+
+            if (favorites.length === 0) {
+                favoriteList.innerHTML = `
+                    <p class="text-center text-slate-500 dark:text-slate-400 text-sm py-8">
+                        Belum ada kota favorit.
+                    </p>
+                `;
+                return;
+            }
+
+            favorites.forEach(city => {
+                const isCurrent = currentCity.lat === city.lat && currentCity.lon === city.lon;
+                const cityCard = document.createElement('div');
+                cityCard.className = `flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 ${
+                    isCurrent 
+                    ? 'bg-soft-blue/10 dark:bg-soft-blue/20 border border-soft-blue/30' 
+                    : 'bg-soft-gray/50 dark:bg-dark-card/50 hover:bg-soft-gray dark:hover:bg-slate-700'
+                }`;
+                cityCard.innerHTML = `
+                    <span class="text-base font-medium text-slate-800 dark:text-white">${city.name}</span>
+                    <button class="remove-fav-btn text-slate-400 hover:text-red-500 dark:hover:text-red-400 p-1" data-lat="${city.lat}" data-lon="${city.lon}">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                `;
+                cityCard.addEventListener('click', (e) => {
+                    if (!e.target.closest('.remove-fav-btn')) {
+                        if (!isCurrent) {
+                            fetchWeatherData(city.lat, city.lon, city.name);
+                        }
+                    }
+                });
+                favoriteList.appendChild(cityCard);
+            });
+
+            document.querySelectorAll('.remove-fav-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const lat = parseFloat(e.currentTarget.dataset.lat);
+                    const lon = parseFloat(e.currentTarget.dataset.lon);
+                    const name = favorites.find(f => f.lat === lat && f.lon === lon)?.name;
+                    if (name) {
+                        toggleFavorite({ name, lat, lon });
+                    }
+                });
+            });
+        }
+
+        async function fetchAutocomplete(query) {
+            if (query.length < 3) {
+                autocompleteResults.innerHTML = '';
+                autocompleteResults.classList.remove('opacity-100', 'pointer-events-auto');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${GEO_URL}?q=${query}&limit=5&appid=${API_KEY}`);
+                const data = await response.json();
+                renderAutocomplete(data);
+            } catch (error) {
+                console.error('Error fetching geocoding:', error);
+                autocompleteResults.innerHTML = '<div class="p-3 text-red-500">Gagal memuat saran kota.</div>';
+                autocompleteResults.classList.add('opacity-100', 'pointer-events-auto');
+            }
+        }
+
+        function renderAutocomplete(cities) {
+            autocompleteResults.innerHTML = '';
+            if (cities.length === 0) {
+                autocompleteResults.classList.remove('opacity-100', 'pointer-events-auto');
+                return;
+            }
+
+            cities.forEach(city => {
+                const cityName = city.name + (city.state ? `, ${city.state}` : '') + (city.country ? `, ${city.country}` : '');
+                const resultItem = document.createElement('div');
+                resultItem.className = 'p-3 cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-soft-gray dark:hover:bg-slate-700 transition-colors duration-200 first:rounded-t-xl last:rounded-b-xl';
+                resultItem.textContent = cityName;
+                resultItem.addEventListener('click', () => {
+                    currentCity.name = city.name;
+                    currentCity.lat = city.lat;
+                    currentCity.lon = city.lon;
+                    searchInput.value = city.name;
+                    autocompleteResults.innerHTML = '';
+                    autocompleteResults.classList.remove('opacity-100', 'pointer-events-auto');
+                    fetchWeatherData(city.lat, city.lon, city.name);
+                });
+                autocompleteResults.appendChild(resultItem);
+            });
+
+            autocompleteResults.classList.add('opacity-100', 'pointer-events-auto');
+        }
+
+        async function fetchWeatherData(lat, lon, cityName) {
+            if (!lat || !lon) return;
+
+            toggleLoading(true);
+
+            try {
+                const currentResponse = await fetch(`${BASE_URL}weather?lat=${lat}&lon=${lon}&units=${currentUnit}&appid=${API_KEY}&lang=id`);
+                const forecastResponse = await fetch(`${BASE_URL}forecast?lat=${lat}&lon=${lon}&units=${currentUnit}&appid=${API_KEY}&lang=id`);
+
+                if (!currentResponse.ok || !forecastResponse.ok) {
+                    throw new Error('Gagal memuat data cuaca.');
+                }
+
+                const currentData = await currentResponse.json();
+                const forecastData = await forecastResponse.json();
+
+                currentCity = { name: cityName, lat, lon };
+                
+                renderCurrentWeather(currentData, cityName);
+                renderForecast(forecastData);
+                renderFavorites();
+
+            } catch (error) {
+                console.error('Fetch Error:', error);
+                weatherDisplay.innerHTML = `
+                    <div class="text-center p-10">
+                        <svg class="w-12 h-12 text-red-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <p class="text-lg text-red-500 mt-3">Gagal memuat data cuaca untuk ${cityName}.</p>
+                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">${error.message}</p>
+                    </div>
+                `;
+                forecastSection.classList.add('hidden');
+
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        function renderCurrentWeather(data, cityName) {
+            const temp = data.main.temp;
+            const weatherDesc = data.weather[0].description.replace(/\b\w/g, l => l.toUpperCase());
+            const iconCode = data.weather[0].icon;
+            const humidity = data.main.humidity;
+            const windSpeed = data.wind.speed;
+            const unitText = currentUnit === UNITS_C ? 'm/s' : 'mph';
+            const timestamp = formatTimestamp(data.dt, data.timezone);
+            const isFavorite = getFavorites().some(fav => fav.lat === currentCity.lat && fav.lon === currentCity.lon);
+            
+            weatherDisplay.innerHTML = `
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                    <div>
+                        <h2 class="text-4xl sm:text-5xl font-extrabold text-slate-800 dark:text-white">${cityName}</h2>
+                        <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">Last updated: ${timestamp}</p>
+                    </div>
+                    <button id="fav-button" class="mt-4 sm:mt-0 p-2 rounded-full transition-colors duration-200 ${
+                        isFavorite 
+                        ? 'bg-soft-blue text-white shadow-md hover:bg-soft-blue/80' 
+                        : 'bg-soft-gray dark:bg-slate-700 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-600'
+                    }" title="${isFavorite ? 'Hapus dari Favorit' : 'Tambah ke Favorit'}">
+                        <svg class="w-6 h-6" fill="${isFavorite ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.307-.92.836-.92 1.143 0l2.364 7.151c.09.27.348.457.643.457h7.521c.969 0 1.371 1.24.588 1.83l-6.104 4.43c-.237.172-.36.467-.27.737l2.364 7.151c.307.92-.15.92-.457 0l-6.104-4.43c-.237-.172-.51-.172-.747 0l-6.104 4.43c-.307.92-.836.92-1.143 0l2.364-7.151c.09-.27-.033-.565-.27-.737l-6.104-4.43c-.783-.59-.381-1.83.588-1.83h7.521c.295 0 .553-.187.643-.457l2.364-7.151z"></path></svg>
+                    </button>
+                </div>
+
+                <div class="mt-6 flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <img src="${getWeatherIcon(iconCode, '4x')}" alt="${weatherDesc}" class="w-24 h-24 sm:w-32 sm:h-32">
+                        <div>
+                            <p class="text-6xl sm:text-8xl font-light text-slate-800 dark:text-white">${convertTemp(temp, currentUnit).replace(/[°CF]/g, '')}</p>
+                            <p class="text-3xl font-light text-soft-blue -mt-2">${convertTemp(temp, currentUnit).match(/[°CF]/g)?.join('') || ''}</p>
+                            <p class="text-xl font-medium text-slate-700 dark:text-slate-200 mt-2">${weatherDesc}</p>
+                        </div>
+                    </div>
+
+                    <div class="text-right space-y-3">
+                        <div class="flex items-center justify-end space-x-2 text-slate-700 dark:text-slate-300">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v2.5M7 14h6m-6 0h.01M17 14h.01M17 11.5V14m0-2.5v2.5m-11 2.5h16a2 2 0 002-2v-10a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                            <span class="text-lg">${humidity}%</span>
+                            <span class="text-sm text-slate-500 dark:text-slate-400">Kelembaban</span>
+                        </div>
+                        <div class="flex items-center justify-end space-x-2 text-slate-700 dark:text-slate-300">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9A9 9 0 003 12m9 9V3m-5 8h10m4 0v1.5a.5.5 0 01-.5.5h-4a.5.5 0 01-.5-.5V12a.5.5 0 00-.5-.5H8a.5.5 0 00-.5.5v1.5a.5.5 0 01-.5.5h-4a.5.5 0 01-.5-.5V12m21.5 0a9 9 0 00-9-9"></path></svg>
+                            <span class="text-lg">${windSpeed} ${unitText}</span>
+                            <span class="text-sm text-slate-500 dark:text-slate-400">Kecepatan Angin</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('fav-button').addEventListener('click', () => {
+                toggleFavorite(currentCity);
+            });
+        }
+
+        function renderForecast(data) {
+            forecastList.innerHTML = '';
+            forecastSection.classList.remove('hidden');
+
+            const dailyForecasts = data.list.filter(item => item.dt_txt.includes('12:00:00'));
+
+            const forecastsToShow = dailyForecasts.length > 5 ? dailyForecasts.slice(0, 5) : dailyForecasts;
+            
+            if (forecastsToShow.length === 0 && data.list.length > 0) {
+                 forecastsToShow.push(data.list[0]);
+            }
+
+            forecastsToShow.forEach(day => {
+                const tempMin = day.main.temp_min;
+                const tempMax = day.main.temp_max;
+                const weatherDesc = day.weather[0].description.replace(/\b\w/g, l => l.toUpperCase());
+                const iconCode = day.weather[0].icon;
+                const dayDate = formatDayDate(day.dt);
+
+                const card = document.createElement('div');
+                card.className = 'inline-block w-40 sm:w-48 flex-shrink-0 bg-soft-gray dark:bg-slate-700 p-4 rounded-xl shadow-md text-center transition-colors duration-200 border border-slate-200 dark:border-slate-600';
+                card.innerHTML = `
+                    <p class="text-lg font-semibold text-slate-800 dark:text-white">${dayDate.split(' ')[0]}</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${dayDate.split(' ').slice(1).join(' ')}</p>
+                    <img src="${getWeatherIcon(iconCode, '2x')}" alt="${weatherDesc}" class="w-16 h-16 mx-auto my-2">
+                    <p class="text-sm font-medium text-slate-700 dark:text-slate-300">${weatherDesc}</p>
+                    <p class="text-base font-bold text-slate-800 dark:text-white mt-2">
+                        ${convertTemp(tempMax, currentUnit)} / <span class="text-slate-500 dark:text-slate-400 font-normal">${convertTemp(tempMin, currentUnit)}</span>
+                    </p>
+                `;
+                forecastList.appendChild(card);
+            });
+            
+            if (forecastsToShow.length === 0) {
+                 forecastList.innerHTML = `
+                    <p class="text-center text-slate-500 dark:text-slate-400 w-full py-8">
+                        Prakiraan 5 hari tidak tersedia.
+                    </p>
+                `;
+            }
+        }
+        
+        let updateTimer;
+
+        function startAutoUpdate() {
+            if (updateTimer) clearInterval(updateTimer);
+            
+            updateTimer = setInterval(() => {
+                if (currentCity.lat && currentCity.lon) {
+                    console.log('Auto-updating weather data...');
+                    fetchWeatherData(currentCity.lat, currentCity.lon, currentCity.name);
+                }
+            }, 5 * 60 * 1000);
+        }
+
+        function init() {
+            applyTheme();
+            applyUnitStyle();
+            
+            renderFavorites();
+
+            const lastCity = JSON.parse(localStorage.getItem('lastCity'));
+            if (lastCity && lastCity.lat && lastCity.lon) {
+                currentCity = lastCity;
+                searchInput.value = lastCity.name;
+                fetchWeatherData(lastCity.lat, lastCity.lon, lastCity.name);
+            }
+
+            startAutoUpdate();
+        }
+
+        themeToggle.addEventListener('click', () => {
+            isDarkMode = !isDarkMode;
+            applyTheme();
+        });
+
+        celsiusToggle.addEventListener('click', () => changeUnit(UNITS_C));
+        fahrenheitToggle.addEventListener('click', () => changeUnit(UNITS_F));
+
+        refreshButton.addEventListener('click', () => {
+            if (currentCity.lat && currentCity.lon) {
+                fetchWeatherData(currentCity.lat, currentCity.lon, currentCity.name);
+            }
+        });
+        
+        document.getElementById('share-button').addEventListener('click', () => {
+            alert('Fitur Share: Anda dapat membagikan tautan ini. (Placeholder)');
+        });
+
+        let autocompleteTimeout;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(autocompleteTimeout);
+            autocompleteTimeout = setTimeout(() => {
+                fetchAutocomplete(e.target.value);
+            }, 300);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !autocompleteResults.contains(e.target)) {
+                autocompleteResults.classList.remove('opacity-100', 'pointer-events-auto');
+            }
+        });
+
+        const originalFetchWeatherData = fetchWeatherData;
+        fetchWeatherData = async function(lat, lon, cityName) {
+            await originalFetchWeatherData(lat, lon, cityName);
+            localStorage.setItem('lastCity', JSON.stringify({ name: cityName, lat, lon }));
+            startAutoUpdate();
+        };
+        
+        window.onload = init;
+
+    </script>
+</body>
+</html>
